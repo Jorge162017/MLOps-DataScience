@@ -73,11 +73,3 @@ Se reutiliza suavizamiento exponencial simple del Lab 1, reestimado en 2023–ju
 Para el final faltan MLflow, integración del manifiesto con el tablero, monitoreo operativo, demostración de restauración desde la interfaz, Docker/volúmenes y verificación desde una copia limpia. La prueba de fallo de hoy no sustituye esas demostraciones finales. El informe final y los registros completos de MLflow también quedan pendientes.
 
 El pipeline registra el commit si existe, además del estado del árbol de trabajo. Mientras los cambios no estén confirmados, el hash del script ayuda a identificarlos pero **no sustituye un commit**. Antes de la entrega final se debe confirmar el código y volver a ejecutar con esa versión.
-
-## Regenerar el PDF (opcional, macOS)
-
-```sh
-swift -module-cache-path /private/tmp/lab-swift-cache exportar_pdf.swift
-```
-
-Este comando usa AppKit/CoreGraphics nativos de macOS y no es una dependencia del pipeline. El PDF entregado ya está generado.
