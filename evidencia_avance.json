@@ -1,0 +1,121 @@
+{
+  "fecha": "2026-10-29T22:31:57.137671+00:00",
+  "alcance": "Avance del Lab 11, serie nacional",
+  "datos_reales": {
+    "filas": 161036,
+    "meses": 210,
+    "fuente_sha256": "cdaba77918ae889c847ba8459503f9cce2441efac41b3d3aa0f05ac9ab283846"
+  },
+  "ejecucion_real_1": "20261029T222826-a3481bac",
+  "ejecucion_real_2": "20261029T223142-03428ea8",
+  "controles": [
+    {
+      "control": "columnas_tipos",
+      "estado": "PASS",
+      "errores": 0,
+      "advertencias": 0,
+      "detalle": "Ausentes: []; tipos numéricos incompatibles: []; dimensiones no textuales: []"
+    },
+    {
+      "control": "fechas_cobertura",
+      "estado": "PASS",
+      "errores": 0,
+      "advertencias": 0,
+      "detalle": "Fechas inválidas: 0; meses sin visitantes: []; filas fuera de cobertura: 0"
+    },
+    {
+      "control": "unicidad",
+      "estado": "PASS",
+      "errores": 0,
+      "advertencias": 0,
+      "detalle": "Duplicados adicionales según clave: 0. Clave: ['Año', 'Mes cod', 'Vía', 'Frontera', 'País', 'Región', 'Región dos', 'Regiones OMT', 'MCEO', 'Agrupación Residencia', 'Tipo de Viajero']"
+    },
+    {
+      "control": "faltantes",
+      "estado": "PASS",
+      "errores": 0,
+      "advertencias": 0,
+      "detalle": "Ausencias por columna: {'Año': 0, 'Mes cod': 0, 'Viajero': 0, 'Vía': 0, 'Frontera': 0, 'País': 0, 'Región': 0, 'Región dos': 0, 'Regiones OMT': 0, 'MCEO': 0, 'Agrupación Residencia': 0, 'Tipo de Viajero': 0}; permitidas: []"
+    },
+    {
+      "control": "valores_denominadores",
+      "estado": "PASS",
+      "errores": 0,
+      "advertencias": 0,
+      "detalle": "Conteos negativos/no finitos bloquean. La estimación no divide conteos; el cociente MAE se define solo si la referencia no es cero. Factor validado en (0,1]."
+    },
+    {
+      "control": "regla_metodologica",
+      "estado": "PASS",
+      "errores": 0,
+      "advertencias": 0,
+      "detalle": "Fuente declarada mensual sin columna diaria: True; categorías desconocidas: []. Se agregan solo Turista + Excursionista, nunca Viajero ni Cruceristas ni presencias diarias."
+    }
+  ],
+  "metricas": {
+    "estimado": {
+      "MAE": 26877.298492565486,
+      "RMSE": 29199.345760927292
+    },
+    "referencia": {
+      "MAE": 39544.75273838595,
+      "RMSE": 45741.74014098287
+    },
+    "ratio_MAE": 0.6796678859108352,
+    "meses": 6
+  },
+  "estado": "APPROVED",
+  "reproducibilidad": {
+    "serie_mensual.csv": {
+      "columnas": [
+        "visitantes"
+      ],
+      "max_diferencia_absoluta": 0.0,
+      "tolerancia_absoluta": 1e-08,
+      "tolerancia_relativa": 0
+    },
+    "evaluacion.csv": {
+      "columnas": [
+        "observado",
+        "estimado",
+        "referencia",
+        "alpha"
+      ],
+      "max_diferencia_absoluta": 0.0,
+      "tolerancia_absoluta": 1e-08,
+      "tolerancia_relativa": 0
+    },
+    "estimaciones.csv": {
+      "columnas": [
+        "valor"
+      ],
+      "max_diferencia_absoluta": 0.0,
+      "tolerancia_absoluta": 1e-08,
+      "tolerancia_relativa": 0
+    }
+  },
+  "prueba_fallo": {
+    "tipo": "XLSX sintético con una clave duplicada, leído realmente por el pipeline",
+    "run_id": "20261029T223142-6ad04854",
+    "estado": "FAILED",
+    "causa": "ValueError: Control crítico fallido: unicidad",
+    "codigo_salida": 1,
+    "manifiesto_anterior_intacto": true,
+    "metricas_inventadas": false,
+    "recuperacion": "Ejecución posterior con fuente real válida: APPROVED"
+  },
+  "pruebas": {
+    "comando": "python -m unittest -v test_pipeline",
+    "cantidad": 11,
+    "resultado": "OK",
+    "salida": "test_daily_source_and_unknown_category (test_pipeline.QualityTests.test_daily_source_and_unknown_category) ... ok\ntest_duplicate_key_with_different_count (test_pipeline.QualityTests.test_duplicate_key_with_different_count) ... ok\ntest_evaluation_only_uses_history_before_target (test_pipeline.QualityTests.test_evaluation_only_uses_history_before_target) ... ok\ntest_failed_pipeline_preserves_approved_and_records_no_metrics (test_pipeline.QualityTests.test_failed_pipeline_preserves_approved_and_records_no_metrics) ... ok\ntest_invalid_date_fractional_month_and_missing_coverage (test_pipeline.QualityTests.test_invalid_date_fractional_month_and_missing_coverage) ... ok\ntest_invalid_factor_and_period_configuration (test_pipeline.QualityTests.test_invalid_factor_and_period_configuration) ... ok\ntest_missing_column_and_incompatible_numeric_type (test_pipeline.QualityTests.test_missing_column_and_incompatible_numeric_type) ... ok\ntest_missing_required_value (test_pipeline.QualityTests.test_missing_required_value) ... ok\ntest_negative_nan_and_infinite_values (test_pipeline.QualityTests.test_negative_nan_and_infinite_values) ... ok\ntest_nonvisitor_counts_excluded (test_pipeline.QualityTests.test_nonvisitor_counts_excluded) ... ok\ntest_valid_fixture_and_zero_preserved (test_pipeline.QualityTests.test_valid_fixture_and_zero_preserved) ... ok\n\n----------------------------------------------------------------------\nRan 11 tests in 0.127s\n\nOK\n"
+  },
+  "pendientes": [
+    "MLflow",
+    "Integración del manifiesto aprobado con Streamlit",
+    "Monitoreo operativo",
+    "Restauración demostrada desde el tablero",
+    "Docker y persistencia",
+    "Copia limpia"
+  ]
+}

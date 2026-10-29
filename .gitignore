@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+# Datos institucionales y resultados: conservar solo localmente o por medio autorizado.
+resultados/
+Lab10-DataScience/referencias/**/*.xlsx
+
+# Repositorio anterior y datos institucionales locales.
+Lab10-DataScience/

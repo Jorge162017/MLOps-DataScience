@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="1190" viewBox="0 0 1100 1190" role="img" aria-labelledby="title desc">
+<title id="title">Pipeline inicial del Laboratorio 11</title>
+<desc id="desc">Fuente mensual y configuración pasan por lectura, seis controles, preparación, evaluación y generación de candidatas. Un fallo o rechazo conserva la versión aprobada anterior. La conexión del manifiesto con el tablero queda pendiente para el final.</desc>
+<defs><marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#416476"/></marker></defs>
+<rect width="1100" height="1190" fill="#f6f8fa"/>
+<g font-family="Arial, sans-serif" fill="#153747">
+<text x="50" y="46" font-size="26" font-weight="bold">Lab 11 · Flujo reproducible y publicación controlada</text>
+<text x="50" y="76" font-size="16">Avance del 29 de octubre de 2026 · Implementación en la raíz del proyecto</text>
+<g fill="#ffffff" stroke="#277865" stroke-width="2">
+<rect x="80" y="110" width="320" height="76" rx="10"/>
+<rect x="440" y="110" width="320" height="76" rx="10"/>
+<rect x="220" y="230" width="400" height="66" rx="10"/>
+<rect x="220" y="342" width="400" height="82" rx="10"/>
+<rect x="220" y="470" width="400" height="66" rx="10"/>
+<rect x="220" y="582" width="400" height="82" rx="10"/>
+<rect x="220" y="710" width="400" height="66" rx="10"/>
+<rect x="220" y="822" width="400" height="82" rx="10"/>
+<rect x="220" y="950" width="400" height="66" rx="10"/>
+</g>
+<g text-anchor="middle" font-size="18">
+<text x="240" y="140">Fuente mensual · Excel / Datos</text><text x="240" y="166" font-size="15">Turista + Excursionista · 2009–jun 2026</text>
+<text x="600" y="140">config.json</text><text x="600" y="166" font-size="15">Rutas, períodos, factor y umbral</text>
+<text x="420" y="259">Lectura y trazabilidad</text><text x="420" y="282" font-size="15">SHA-256 · configuración · versiones · Git</text>
+<text x="420" y="371">Seis controles automáticos</text><text x="420" y="395" font-size="15">Esquema · fechas · clave · faltantes</text><text x="420" y="415" font-size="15">Valores / denominadores · regla metodológica</text>
+<text x="420" y="498">Preparación mensual nacional</text><text x="420" y="522" font-size="15">Sin imputar cero ni eliminar duplicados</text>
+<text x="420" y="611">Ajuste SES y evaluación temporal</text><text x="420" y="635" font-size="15">Historia desde 2023 · prueba ene–jun 2026</text><text x="420" y="655" font-size="15">MAE / RMSE frente al último valor observado</text>
+<text x="420" y="739">Estimaciones candidatas</text><text x="420" y="763" font-size="15">Julio–agosto 2026 · parámetros y metadatos</text>
+<text x="420" y="851">Autorizar publicación</text><text x="420" y="876" font-size="15">Calidad + integridad + MAE ≤ referencia</text><text x="420" y="895" font-size="15">Regla fijada en configuración</text>
+<text x="420" y="979">resultados/aprobada.json</text><text x="420" y="1002" font-size="15">Cambio atómico · versiones anteriores conservadas</text>
+</g>
+<g stroke="#416476" stroke-width="2" fill="none" marker-end="url(#arrow)">
+<path d="M240 186 V208 H420 V226"/><path d="M600 186 V208 H420"/>
+<path d="M420 296 V338"/><path d="M420 424 V466"/><path d="M420 536 V578"/>
+<path d="M420 664 V706"/><path d="M420 776 V818"/><path d="M420 904 V946"/>
+<path d="M620 383 H710"/><path d="M620 863 H710"/>
+<path d="M420 1016 V1060" stroke-dasharray="6 5"/>
+</g>
+<g fill="#fff1e0" stroke="#ad7025" stroke-width="2"><rect x="715" y="344" width="335" height="98" rx="10"/><rect x="715" y="824" width="335" height="98" rx="10"/></g>
+<g font-size="17" text-anchor="middle"><text x="882" y="373">Fallo crítico → detener</text><text x="882" y="399" font-size="15">Guardar reporte y causa</text><text x="882" y="425" font-size="15">Conservar versión aprobada</text><text x="882" y="853">Rechazo → conservar candidata</text><text x="882" y="879" font-size="15">Sin cambiar el umbral</text><text x="882" y="905" font-size="15">Conservar versión aprobada</text></g>
+<rect x="220" y="1064" width="400" height="70" rx="10" fill="#eef2f7" stroke="#77899d" stroke-width="2" stroke-dasharray="7 5"/>
+<text x="420" y="1093" text-anchor="middle" font-size="18">Consulta desde el tablero</text><text x="420" y="1119" text-anchor="middle" font-size="15">Conexión pendiente para la entrega final</text>
+<text x="50" y="1170" font-size="14">Cada ejecución registra inicio, fin, etapas, calidad, parámetros, métricas y resultado de publicación.</text>
+</g></svg>

@@ -1,0 +1,35 @@
+{
+  "source": {
+    "path": "Lab10-DataScience/referencias/lab1/Laboratorio 1. Series de Tiempo 2026 - Base_Migracion_2009-2026jun.xlsx",
+    "sheet": "Datos",
+    "frequency": "monthly",
+    "coverage_start": "2009-01-01",
+    "coverage_end": "2026-06-01",
+    "key": ["Año", "Mes cod", "Vía", "Frontera", "País", "Región", "Región dos", "Regiones OMT", "MCEO", "Agrupación Residencia", "Tipo de Viajero"],
+    "allowed_missing": []
+  },
+  "scope": {
+    "destination": "Guatemala — serie nacional",
+    "unit": "visitantes (Turista + Excursionista)",
+    "traveler_types": ["Turista", "Excursionista"],
+    "allocation_factor": 1.0,
+    "allocation_justification": "Sin reparto territorial: serie nacional. No representa visitantes de un destino específico."
+  },
+  "procedure": {
+    "name": "Suavizamiento exponencial simple",
+    "version": "ses-lab11-v1",
+    "training_start": "2023-01-01",
+    "evaluation_start": "2026-01-01",
+    "evaluation_end": "2026-06-01",
+    "forecast_start": "2026-07-01",
+    "forecast_months": 2,
+    "initialization_method": "estimated",
+    "optimized": true,
+    "seed": 221038
+  },
+  "acceptance": {
+    "max_mae_ratio_to_baseline": 1.0,
+    "rationale": "Aceptar solo si todos los controles pasan, las salidas son íntegras y el MAE no supera al último valor observado sobre los mismos meses. Umbral fijado antes de ejecutar; no garantiza precisión futura."
+  },
+  "output_dir": "resultados"
+}
