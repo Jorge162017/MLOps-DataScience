@@ -4,8 +4,8 @@
 <defs><marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#416476"/></marker></defs>
 <rect width="1100" height="1190" fill="#f6f8fa"/>
 <g font-family="Arial, sans-serif" fill="#153747">
-<text x="50" y="46" font-size="26" font-weight="bold">Lab 11 · Flujo reproducible y publicación controlada</text>
-<text x="50" y="76" font-size="16">Avance del 29 de octubre de 2026 · Implementación en la raíz del proyecto</text>
+<text x="50" y="46" font-size="26" font-weight="bold">Lab 11 · Tikal y Flores (Petén) · Grupo 2</text>
+<text x="50" y="76" font-size="16">Fase 1 · Fuentes separadas, estimación temporal y regla de aceptación</text>
 <g fill="#ffffff" stroke="#277865" stroke-width="2">
 <rect x="80" y="110" width="320" height="76" rx="10"/>
 <rect x="440" y="110" width="320" height="76" rx="10"/>
@@ -18,15 +18,15 @@
 <rect x="220" y="950" width="400" height="66" rx="10"/>
 </g>
 <g text-anchor="middle" font-size="18">
-<text x="240" y="140">Fuente mensual · Excel / Datos</text><text x="240" y="166" font-size="15">Turista + Excursionista · 2009–jun 2026</text>
-<text x="600" y="140">config.json</text><text x="600" y="166" font-size="15">Rutas, períodos, factor y umbral</text>
+<text x="240" y="140">Ocho fuentes institucionales</text><text x="240" y="166" font-size="15">Migración · movilidad · Tikal · AIMM · hoteles</text>
+<text x="600" y="140">config.json</text><text x="600" y="166" font-size="15">Corte dic 2025 · horizonte ene–feb 2026</text>
 <text x="420" y="259">Lectura y trazabilidad</text><text x="420" y="282" font-size="15">SHA-256 · configuración · versiones · Git</text>
-<text x="420" y="371">Seis controles automáticos</text><text x="420" y="395" font-size="15">Esquema · fechas · clave · faltantes</text><text x="420" y="415" font-size="15">Valores / denominadores · regla metodológica</text>
-<text x="420" y="498">Preparación mensual nacional</text><text x="420" y="522" font-size="15">Sin imputar cero ni eliminar duplicados</text>
-<text x="420" y="611">Ajuste SES y evaluación temporal</text><text x="420" y="635" font-size="15">Historia desde 2023 · prueba ene–jun 2026</text><text x="420" y="655" font-size="15">MAE / RMSE frente al último valor observado</text>
-<text x="420" y="739">Estimaciones candidatas</text><text x="420" y="763" font-size="15">Julio–agosto 2026 · parámetros y metadatos</text>
-<text x="420" y="851">Autorizar publicación</text><text x="420" y="876" font-size="15">Calidad + integridad + MAE ≤ referencia</text><text x="420" y="895" font-size="15">Regla fijada en configuración</text>
-<text x="420" y="979">resultados/aprobada.json</text><text x="420" y="1002" font-size="15">Cambio atómico · versiones anteriores conservadas</text>
+<text x="420" y="371">Seis controles en cada fuente (48)</text><text x="420" y="395" font-size="15">Esquema · fechas · clave · faltantes</text><text x="420" y="415" font-size="15">Valores / denominadores · regla metodológica</text>
+<text x="420" y="498">Preparación por destino y por unidad</text><text x="420" y="522" font-size="15">Sitios separados · pasajeros ≠ operaciones</text>
+<text x="420" y="611">Holt–Winters + escala por destino</text><text x="420" y="635" font-size="15">Migración 2023–2025 · escala sep–dic 2025</text><text x="420" y="655" font-size="15">Validación oct–dic 2025 sin información futura</text>
+<text x="420" y="739">Estimaciones candidatas</text><text x="420" y="763" font-size="15">Enero–febrero 2026 · tres destinos separados</text>
+<text x="420" y="851">Autorizar publicación</text><text x="420" y="876" font-size="15">Calidad + integridad + MAE ≤ último valor</text><text x="420" y="895" font-size="15">Candidata actual: rechazada en dos destinos</text>
+<text x="420" y="979">resultados_peten/aprobada.json</text><text x="420" y="1002" font-size="15">Sin publicación si falla cualquier destino</text>
 </g>
 <g stroke="#416476" stroke-width="2" fill="none" marker-end="url(#arrow)">
 <path d="M240 186 V208 H420 V226"/><path d="M600 186 V208 H420"/>

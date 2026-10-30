@@ -1,35 +1,147 @@
 {
-  "source": {
+  "group": 2,
+  "destination": "Tikal y Flores (Petén)",
+  "migration": {
     "path": "Lab10-DataScience/referencias/lab1/Laboratorio 1. Series de Tiempo 2026 - Base_Migracion_2009-2026jun.xlsx",
     "sheet": "Datos",
     "frequency": "monthly",
     "coverage_start": "2009-01-01",
     "coverage_end": "2026-06-01",
-    "key": ["Año", "Mes cod", "Vía", "Frontera", "País", "Región", "Región dos", "Regiones OMT", "MCEO", "Agrupación Residencia", "Tipo de Viajero"],
+    "key": [
+      "Año",
+      "Mes cod",
+      "Vía",
+      "Frontera",
+      "País",
+      "Región",
+      "Región dos",
+      "Regiones OMT",
+      "MCEO",
+      "Agrupación Residencia",
+      "Tipo de Viajero"
+    ],
     "allowed_missing": []
   },
+  "sources": {
+    "mobility": {
+      "path": "BD_moviidad_mensual.xlsx",
+      "sheet": "Peten",
+      "frequency": "monthly",
+      "coverage": [
+        "2025-09",
+        "2025-10",
+        "2025-11",
+        "2025-12",
+        "2026-03",
+        "2026-04",
+        "2026-05",
+        "2026-06",
+        "2026-07",
+        "2026-08"
+      ]
+    },
+    "tikal": {
+      "path": "Peten/Visitantes_Tikal_2017-2026.xlsx",
+      "sheet": "Datos",
+      "start": "2017-01",
+      "end": "2026-08"
+    },
+    "airlines": {
+      "path": "Peten/AIMM_Aerolineas_2023-2026.xlsx",
+      "sheet": "Base de Datos",
+      "start": "2023-01",
+      "end": "2026-04"
+    },
+    "airport": {
+      "path": "Peten/AIMM_Consolidado_2022-2025.xlsx",
+      "sheet": "Base Consolidada",
+      "header": 2,
+      "years": [
+        2022,
+        2024,
+        2025
+      ]
+    },
+    "operations": {
+      "path": "Peten/AIMM_Operaciones_Aeronauticas_2022-2026.xlsx",
+      "sheet": "Base de Operaciones",
+      "header": 2,
+      "start": "2022-01",
+      "end": "2026-04"
+    },
+    "occupancy": {
+      "path": "indice_ocupacion_mensual_2023_2025_1.csv",
+      "department": "Petén",
+      "start": "2023-01",
+      "end": "2025-12"
+    },
+    "capacity": {
+      "path": "oferta_hotelera_2022_2026.csv",
+      "department": "Petén",
+      "cuts": [
+        [
+          2022,
+          4
+        ],
+        [
+          2023,
+          4
+        ],
+        [
+          2024,
+          4
+        ],
+        [
+          2025,
+          4
+        ],
+        [
+          2026,
+          1
+        ]
+      ]
+    }
+  },
   "scope": {
-    "destination": "Guatemala — serie nacional",
-    "unit": "visitantes (Turista + Excursionista)",
-    "traveler_types": ["Turista", "Excursionista"],
-    "allocation_factor": 1.0,
-    "allocation_justification": "Sin reparto territorial: serie nacional. No representa visitantes de un destino específico."
+    "destinations": [
+      "El Remate Y Alrededores Lago",
+      "Isla De Flores",
+      "Mundo Maya Aeropuerto"
+    ],
+    "traveler_types": [
+      "Turista",
+      "Excursionista"
+    ],
+    "unit": "visitantes mensuales por destino según movilidad",
+    "sum_destinations": false
   },
   "procedure": {
-    "name": "Suavizamiento exponencial simple",
-    "version": "ses-lab11-v1",
+    "name": "Holt-Winters nacional con escala empírica por destino",
+    "version": "peten-hw-escala-v1",
     "training_start": "2023-01-01",
-    "evaluation_start": "2026-01-01",
-    "evaluation_end": "2026-06-01",
-    "forecast_start": "2026-07-01",
-    "forecast_months": 2,
+    "cutoff": "2025-12-01",
+    "targets": [
+      "2026-01-01",
+      "2026-02-01"
+    ],
+    "validation_start": "2025-10-01",
+    "validation_end": "2025-12-01",
+    "national_validation_start": "2025-01-01",
+    "national_validation_end": "2025-12-01",
+    "horizon": 2,
+    "seasonal_periods": 12,
+    "trend": "add",
+    "damped_trend": true,
+    "seasonal": "add",
     "initialization_method": "estimated",
-    "optimized": true,
-    "seed": 221038
+    "seed": 221038,
+    "allocation": "sum(movilidad_destino en meses observados <= corte) / sum(migracion_nacional en los mismos meses)",
+    "minimum_calibration_months": 1
   },
   "acceptance": {
     "max_mae_ratio_to_baseline": 1.0,
-    "rationale": "Aceptar solo si todos los controles pasan, las salidas son íntegras y el MAE no supera al último valor observado sobre los mismos meses. Umbral fijado antes de ejecutar; no garantiza precisión futura."
+    "minimum_validation_months": 3,
+    "rationale": "Cada destino debe tener al menos 3 meses evaluados, integridad y controles válidos, MAE no superior al último valor observado. Se exigen todos los destinos para publicar el conjunto; no se cambia la regla tras evaluar."
   },
-  "output_dir": "resultados"
+  "output_dir": "resultados_peten"
 }

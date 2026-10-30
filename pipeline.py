@@ -1,250 +1,201 @@
-"""Avance Lab 11: validación estricta, preparación y estimación fuera del tablero."""
-from __future__ import annotations
-
+"""Fase 1: estimación y triangulación de Tikal y Flores, grupo 2."""
 import argparse
 from datetime import datetime, timezone
-import hashlib
 import importlib.metadata
 import json
 from pathlib import Path
-import subprocess
 import sys
 import uuid
-
+import warnings
 import numpy as np
 import pandas as pd
-from pandas.api.types import is_numeric_dtype
-from statsmodels.tsa.holtwinters import SimpleExpSmoothing
-
-ROOT = Path(__file__).resolve().parent
-NUMERIC = ["Año", "Mes cod", "Viajero"]
-DIMENSIONS = ["Vía", "Frontera", "País", "Región", "Región dos", "Regiones OMT",
-              "MCEO", "Agrupación Residencia", "Tipo de Viajero"]
-
-
-def now():
-    return datetime.now(timezone.utc).isoformat()
-
-
-def write_json(path, value):
-    path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(json.dumps(value, ensure_ascii=False, indent=2, allow_nan=False), encoding="utf-8")
-    tmp.replace(path)
-
-
-def sha256(path):
-    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+from statsmodels.tsa.holtwinters import ExponentialSmoothing
+from fuentes import read_sources, check_sources, prepare_sources
+from utilidades import ROOT, now, write_json, sha256, git_state
 
 
 def validate_config(cfg):
-    source, proc, scope = cfg["source"], cfg["procedure"], cfg["scope"]
-    dates = [source["coverage_start"], proc["training_start"], proc["evaluation_start"],
-             proc["evaluation_end"], source["coverage_end"], proc["forecast_start"]]
-    dates = [pd.Timestamp(d) for d in dates]
-    if any(d.day != 1 for d in dates) or dates != sorted(dates):
-        raise ValueError("Períodos fuera de orden o no mensuales")
-    if dates[1] >= dates[2] or dates[3] > dates[4] or dates[5] != dates[4] + pd.offsets.MonthBegin(1):
-        raise ValueError("Se requiere historia anterior a evaluación y pronóstico posterior a cobertura")
-    if not isinstance(proc["forecast_months"], int) or proc["forecast_months"] < 1:
-        raise ValueError("forecast_months debe ser entero positivo")
-    factor = scope["allocation_factor"]
-    if not isinstance(factor, (int, float)) or not np.isfinite(factor) or not 0 < factor <= 1:
-        raise ValueError("Factor de reparto debe ser finito y estar en (0, 1]")
-    threshold = cfg["acceptance"]["max_mae_ratio_to_baseline"]
-    if not isinstance(threshold, (int, float)) or not np.isfinite(threshold) or threshold < 0:
-        raise ValueError("Umbral MAE inválido")
-    if not scope["traveler_types"] or not set(scope["traveler_types"]) <= {"Turista", "Excursionista"}:
-        raise ValueError("Tipos de visitante incompatibles con definición del proyecto")
-    if not source["key"] or not set(source["key"]) <= set(NUMERIC[:2] + DIMENSIONS):
-        raise ValueError("Clave de fuente inválida")
-    if not set(source["allowed_missing"]) <= set(DIMENSIONS) - set(source["key"]):
-        raise ValueError("No se permiten faltantes en variables críticas ni en la clave")
-    if proc["initialization_method"] != "estimated" or proc["optimized"] is not True:
-        raise ValueError("Esta versión usa inicialización estimada y ajuste optimizado del Lab 1")
+    p = cfg['procedure']
+    start, cutoff = pd.Timestamp(p['training_start']), pd.Timestamp(p['cutoff'])
+    targets = pd.DatetimeIndex(pd.to_datetime(p['targets']))
+    expected = pd.date_range(cutoff + pd.offsets.MonthBegin(1), periods=p['horizon'], freq='MS')
+    if start.day != 1 or cutoff.day != 1 or not targets.equals(expected):
+        raise ValueError('Objetivos deben seguir al corte en meses consecutivos')
+    if start >= cutoff or (cutoff.to_period('M')-start.to_period('M')).n+1 < 24:
+        raise ValueError('Se requieren al menos dos ciclos mensuales')
+    if p['horizon'] != 2 or p['seasonal_periods'] != 12:
+        raise ValueError('Esta versión requiere horizonte 2 y ciclo 12')
+    for prefix in ['', 'national_']:
+        if not (pd.Timestamp(p[prefix+'validation_start']) <= pd.Timestamp(p[prefix+'validation_end']) <= cutoff):
+            raise ValueError('Validación debe terminar antes de los objetivos')
+    if cfg['scope']['sum_destinations'] is not False or len(set(cfg['scope']['destinations'])) != 3:
+        raise ValueError('Se requieren tres destinos separados')
+    if cfg['sources']['mobility']['frequency'] != 'monthly':
+        raise ValueError('Se requiere fuente mensual')
+    if set(cfg['scope']['traveler_types']) != {'Turista','Excursionista'}:
+        raise ValueError('La serie nacional debe sumar solo Turista + Excursionista')
+    ratio = cfg['acceptance']['max_mae_ratio_to_baseline']
+    if not np.isfinite(ratio) or ratio < 0:
+        raise ValueError('Umbral inválido')
+    if p['minimum_calibration_months'] < 1 or cfg['acceptance']['minimum_validation_months'] < 1:
+        raise ValueError('Se requiere historia de calibración y validación')
+    if (p['trend'],p['damped_trend'],p['seasonal'],p['initialization_method']) != ('add',True,'add','estimated'):
+        raise ValueError('Esta versión reutiliza Holt-Winters aditivo amortiguado')
 
 
-def validate_data(df, cfg):
-    """No elimina ni imputa filas: todos los controles se reportan, incluso si falla esquema."""
-    checks = []
-    required = NUMERIC + DIMENSIONS
-
-    def add(name, failures=0, warnings=0, detail=""):
-        checks.append({"control": name, "estado": "FAIL" if failures else "WARN" if warnings else "PASS",
-                       "errores": int(failures), "advertencias": int(warnings), "detalle": detail})
-
-    missing = sorted(set(required) - set(df.columns))
-    wrong = [c for c in NUMERIC if c in df and not is_numeric_dtype(df[c])]
-    wrong_text = [c for c in DIMENSIONS if c in df and not df[c].dropna().map(lambda v: isinstance(v, str)).all()]
-    add("columnas_tipos", len(missing) + len(wrong) + len(wrong_text),
-        detail=f"Ausentes: {missing}; tipos numéricos incompatibles: {wrong}; dimensiones no textuales: {wrong_text}")
-
-    dates = pd.Series(pd.NaT, index=df.index, dtype="datetime64[ns]")
-    if all(c in df for c in ["Año", "Mes cod"]):
-        years, months = pd.to_numeric(df["Año"], errors="coerce"), pd.to_numeric(df["Mes cod"], errors="coerce")
-        valid = (years.notna() & months.notna() & years.mod(1).eq(0) & months.mod(1).eq(0)
-                 & years.between(1900, 2200) & months.between(1, 12))
-        dates.loc[valid] = pd.to_datetime(dict(year=years[valid].astype(int), month=months[valid].astype(int), day=1), errors="coerce")
-    expected = pd.date_range(cfg["source"]["coverage_start"], cfg["source"]["coverage_end"], freq="MS")
-    selected = df["Tipo de Viajero"].isin(cfg["scope"]["traveler_types"]) if "Tipo de Viajero" in df else pd.Series(False, index=df.index)
-    absent = expected.difference(pd.DatetimeIndex(dates[selected].dropna().unique()))
-    outside = dates.notna() & ~dates.isin(expected)
-    add("fechas_cobertura", int(dates.isna().sum()) + len(absent), int(outside.sum()),
-        f"Fechas inválidas: {int(dates.isna().sum())}; meses sin visitantes: {[d.strftime('%Y-%m') for d in absent]}; filas fuera de cobertura: {int(outside.sum())}")
-
-    key = cfg["source"]["key"]
-    duplicates = int(df.duplicated(key).sum()) if set(key) <= set(df.columns) else 1
-    add("unicidad", duplicates, detail=f"Duplicados adicionales según clave: {duplicates}. Clave: {key}")
-
-    allowed = set(cfg["source"]["allowed_missing"])
-    nulls = {}
-    for c in required:
-        if c in df:
-            blank = df[c].isna() | df[c].map(lambda x: isinstance(x, str) and not x.strip())
-            nulls[c] = int(blank.sum())
-    add("faltantes", sum(n for c, n in nulls.items() if c not in allowed),
-        sum(n for c, n in nulls.items() if c in allowed), f"Ausencias por columna: {nulls}; permitidas: {sorted(allowed)}")
-
-    values = pd.to_numeric(df["Viajero"], errors="coerce") if "Viajero" in df else pd.Series([np.nan])
-    bad = ~np.isfinite(values) | values.lt(0)
-    add("valores_denominadores", int(bad.sum()), detail="Conteos negativos/no finitos bloquean. La estimación no divide conteos; el cociente MAE se define solo si la referencia no es cero. Factor validado en (0,1].")
-
-    # La identidad del libro no puede inferirse solo de sus cantidades: requiere procedencia documentada.
-    monthly = cfg["source"]["frequency"] == "monthly" and not any(str(c).strip().lower() in {"día", "dia", "day", "fecha diaria"} for c in df)
-    types = set(df["Tipo de Viajero"].dropna()) if "Tipo de Viajero" in df else set()
-    known_types = {"Turista", "Excursionista", "Cruceristas", "Viajero"}
-    add("regla_metodologica", int(not monthly) + len(types - known_types),
-        detail=f"Fuente declarada mensual sin columna diaria: {monthly}; categorías desconocidas: {sorted(types - known_types)}. Se agregan solo Turista + Excursionista, nunca Viajero ni Cruceristas ni presencias diarias.")
-    return checks, dates
+def national_forecast(national, cutoff, horizon, cfg):
+    history = national.loc[cfg['procedure']['training_start']:cutoff]
+    if len(history)<24 or history.isna().any() or not history.index.equals(pd.date_range(history.index.min(),cutoff,freq='MS')):
+        raise ValueError('Historia nacional insuficiente o incompleta hasta el corte')
+    # Misma configuración del Lab 1. Escala numérica fija para estabilidad del optimizador.
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        fitted = ExponentialSmoothing(history.to_numpy()/100000, trend='add', damped_trend=True,
+            seasonal='add', seasonal_periods=12, initialization_method='estimated').fit(optimized=True,use_brute=True)
+    if not fitted.mle_retvals.get('success',True):
+        raise ValueError('El ajuste Holt-Winters no convergió')
+    predictions = np.asarray(fitted.forecast(horizon))*100000
+    if not np.isfinite(predictions).all() or (predictions<0).any():
+        raise ValueError('Pronóstico nacional inválido')
+    params = {k:float(fitted.params[k]) for k in ['smoothing_level','smoothing_trend','smoothing_seasonal','damping_trend','initial_level','initial_trend']}
+    params.update(initial_seasons=fitted.params['initial_seasons'].tolist(),escala_numerica=100000,
+        ajuste_desde=history.index.min().strftime('%Y-%m-%d'),ajuste_hasta=cutoff.strftime('%Y-%m-%d'),
+        advertencias=[str(w.message) for w in caught])
+    return predictions,params
 
 
-def prepare(df, dates, cfg):
-    mask = df["Tipo de Viajero"].isin(cfg["scope"]["traveler_types"])
-    monthly = df.loc[mask, ["Viajero"]].assign(Fecha=dates[mask]).groupby("Fecha")["Viajero"].sum(min_count=1)
-    expected = pd.date_range(cfg["source"]["coverage_start"], cfg["source"]["coverage_end"], freq="MS")
-    monthly = monthly.reindex(expected) * cfg["scope"]["allocation_factor"]
-    monthly.index.name = "periodo"
-    if monthly.isna().any():
-        raise ValueError("La serie preparada contiene meses ausentes; no se sustituyen por cero")
-    return monthly
+def allocation(national,mobility,destination,cutoff,cfg):
+    observed = mobility[destination].loc[:cutoff].dropna()
+    if len(observed)<cfg['procedure']['minimum_calibration_months']:
+        raise ValueError('Historia insuficiente para escala de '+destination)
+    denominator = national.reindex(observed.index)
+    if denominator.isna().any() or not np.isfinite(denominator).all() or denominator.le(0).any():
+        raise ValueError('Denominador de calibración ausente, no finito o cero')
+    factor = float(observed.sum()/denominator.sum())
+    if not np.isfinite(factor) or factor<=0:
+        raise ValueError('Escala no positiva o no finita')
+    return factor,dict(destino=destination,factor=factor,meses=len(observed),periodos=observed.index.strftime('%Y-%m-%d').tolist(),
+        numerador=float(observed.sum()),denominador=float(denominator.sum()),corte=cutoff.strftime('%Y-%m-%d'),
+        interpretacion='Escala empírica entre poblaciones diferentes; no probabilidad ni participación de mercado')
 
 
-def fit(history):
-    # Mismo algoritmo/configuración SES del Lab 1, reestimado en historia 2023+.
-    return SimpleExpSmoothing(history.to_numpy(), initialization_method="estimated").fit(optimized=True)
+def error_metrics(frame):
+    result = {}
+    for column in ['estimado','referencia']:
+        error = frame[column]-frame.observado
+        result[column] = dict(MAE=float(error.abs().mean()),RMSE=float(np.sqrt((error**2).mean())))
+    baseline = result['referencia']['MAE']
+    result.update(ratio_MAE=result['estimado']['MAE']/baseline if baseline>0 else None,meses=int(len(frame)))
+    return result
 
 
-def estimate(monthly, cfg):
-    proc = cfg["procedure"]
-    series = monthly.loc[proc["training_start"]:]
-    rows = []
-    for month in pd.date_range(proc["evaluation_start"], proc["evaluation_end"], freq="MS"):
-        history = series.loc[series.index < month]
-        if len(history) < 2:
-            raise ValueError("Historia insuficiente para ajustar SES")
-        fitted = fit(history)
-        rows.append({"periodo": month.strftime("%Y-%m-%d"), "observado": float(series.loc[month]),
-                     "estimado": float(fitted.forecast(1)[0]), "referencia": float(history.iloc[-1]),
-                     "ajuste_hasta": history.index[-1].strftime("%Y-%m-%d"),
-                     "alpha": float(fitted.params["smoothing_level"])})
-    evaluation = pd.DataFrame(rows)
-    metrics = {}
-    for col in ["estimado", "referencia"]:
-        errors = evaluation[col] - evaluation["observado"]
-        metrics[col] = {"MAE": float(errors.abs().mean()), "RMSE": float(np.sqrt((errors ** 2).mean()))}
-    baseline = metrics["referencia"]["MAE"]
-    metrics["ratio_MAE"] = metrics["estimado"]["MAE"] / baseline if baseline > 0 else None
-    metrics["meses"] = len(rows)
-    model = fit(series)
-    periods = pd.date_range(proc["forecast_start"], periods=proc["forecast_months"], freq="MS")
-    forecast = pd.DataFrame({"periodo": periods.strftime("%Y-%m-%d"), "valor": model.forecast(len(periods))})
-    parameters = {"alpha": float(model.params["smoothing_level"]), "nivel_inicial": float(model.params["initial_level"]),
-                  "nivel_final": float(model.level[-1]), "formula": "l_t = alpha*y_t + (1-alpha)*l_(t-1); y_(T+h) = l_T",
-                  "ajuste_desde": series.index[0].strftime("%Y-%m-%d"), "ajuste_hasta": series.index[-1].strftime("%Y-%m-%d")}
-    return evaluation, metrics, forecast, parameters
+def evaluate(national,mobility,cfg):
+    p=cfg['procedure']; rows=[]; national_rows=[]; models=[]
+    for kind,prefix in [('destino',''),('nacional','national_')]:
+        months=pd.date_range(p[prefix+'validation_start'],p[prefix+'validation_end'],freq='MS')
+        for i in range(0,len(months),p['horizon']):
+            targets=months[i:i+p['horizon']]; cutoff=targets[0]-pd.offsets.MonthBegin(1)
+            forecast,params=national_forecast(national,cutoff,len(targets),cfg)
+            models.append(dict(tipo=kind,**params))
+            if kind=='nacional':
+                for month,prediction in zip(targets,forecast):
+                    ref=month-pd.DateOffset(years=1)
+                    national_rows.append(dict(periodo=month,corte=cutoff,observado=national.loc[month],estimado=prediction,
+                        referencia=national.loc[ref],referencia_periodo=ref,horizonte=(month.to_period('M')-cutoff.to_period('M')).n))
+            else:
+                for destination in cfg['scope']['destinations']:
+                    factor,info=allocation(national,mobility,destination,cutoff,cfg)
+                    baseline=mobility[destination].loc[:cutoff].dropna().iloc[-1]
+                    for month,prediction in zip(targets,forecast):
+                        observed=mobility[destination].get(month,np.nan)
+                        if pd.isna(observed): raise ValueError('Mes evaluado sin observado')
+                        rows.append(dict(destino=destination,periodo=month,corte=cutoff,observado=observed,
+                            estimado=prediction*factor,referencia=baseline,factor=factor,meses_calibracion=info['meses'],
+                            calibracion_hasta=info['periodos'][-1],horizonte=(month.to_period('M')-cutoff.to_period('M')).n))
+    evaluation=pd.DataFrame(rows); national_evaluation=pd.DataFrame(national_rows)
+    metrics=dict(destinos={},nacional=error_metrics(national_evaluation))
+    for destination,frame in evaluation.groupby('destino'):
+        item=error_metrics(frame)
+        item['aceptado']=bool(item['meses']>=cfg['acceptance']['minimum_validation_months'] and
+            item['estimado']['MAE']<=item['referencia']['MAE']*cfg['acceptance']['max_mae_ratio_to_baseline'])
+        metrics['destinos'][destination]=item
+    return evaluation,national_evaluation,metrics,models
 
 
-def git_state():
-    def call(*args):
-        try:
-            return subprocess.check_output(["/usr/bin/git", "-C", str(ROOT), *args], stderr=subprocess.DEVNULL, text=True).strip()
-        except (OSError, subprocess.CalledProcessError):
-            return None
-    return {"commit": call("rev-parse", "HEAD"), "working_tree_status": call("status", "--porcelain"),
-            "nota": "Un commit nulo o un árbol modificado no acredita una versión confirmada. Se guarda también la huella del pipeline."}
+def estimate(national,mobility,cfg):
+    cutoff=pd.Timestamp(cfg['procedure']['cutoff']); targets=pd.DatetimeIndex(pd.to_datetime(cfg['procedure']['targets']))
+    predictions,params=national_forecast(national,cutoff,len(targets),cfg)
+    rows=[]; factors=[]
+    for destination in cfg['scope']['destinations']:
+        factor,info=allocation(national,mobility,destination,cutoff,cfg); factors.append(info)
+        for month,value in zip(targets,predictions):
+            rows.append(dict(destino=destination,periodo=month,valor=float(value*factor),unidad=cfg['scope']['unit'],
+                tipo='estimado',factor=factor,corte=cutoff,nacional_estimado=float(value)))
+    return pd.DataFrame(rows),factors,params
+
+
+def triangulate(prepared,forecast):
+    observed=prepared['movilidad'].stack().rename('visitantes_movilidad').reset_index()
+    observed.columns=['periodo','destino','visitantes_movilidad']; observed['tipo_denominador']='observado'
+    estimated=forecast[['periodo','destino','valor']].rename(columns={'valor':'visitantes_movilidad'}).assign(tipo_denominador='estimado_candidato')
+    combined=pd.concat([observed,estimated],ignore_index=True)
+    combined=combined.merge(prepared['tikal'].reset_index()[['periodo','total']],on='periodo',how='left').rename(columns={'total':'boletos_tikal'})
+    combined['ratio_boletos_a_movilidad_pct']=combined.boletos_tikal.div(combined.visitantes_movilidad.where(combined.visitantes_movilidad.gt(0)))*100
+    combined['interpretacion']='Razón entre fuentes, no porcentaje de personas que compró boleto; poblaciones no enlazadas'
+    combined=combined.merge(prepared['ocupacion'].reset_index(),on='periodo',how='left')
+    entries=prepared['aeropuerto'].query("flujo == 'Entrada'")[['periodo','pasajeros']].rename(columns={'pasajeros':'pasajeros_entrada_AIMM'})
+    return combined.merge(entries,on='periodo',how='left')
 
 
 def run(config_path):
-    cfg = json.loads(Path(config_path).read_text(encoding="utf-8"))
-    validate_config(cfg)
-    np.random.seed(cfg["procedure"]["seed"])
-    run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S") + "-" + uuid.uuid4().hex[:8]
-    output = ROOT / cfg["output_dir"]
-    folder = output / "ejecuciones" / run_id
-    folder.mkdir(parents=True, exist_ok=False)
-    report = {"run_id": run_id, "inicio": now(), "estado": "RUNNING", "etapas": [], "controles": [],
-              "config_sha256": sha256(config_path), "pipeline_sha256": sha256(__file__), "git": git_state(),
-              "dependencias": {name: importlib.metadata.version(name) for name in ["pandas", "numpy", "openpyxl", "statsmodels"]}}
-    write_json(folder / "config.json", cfg)
-
-    def stage(name):
-        report["etapas"].append({"etapa": name, "fin": now()})
-
+    cfg=json.loads(Path(config_path).read_text()); validate_config(cfg); np.random.seed(cfg['procedure']['seed'])
+    run_id=datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S')+'-'+uuid.uuid4().hex[:8]
+    output=ROOT/cfg['output_dir']; folder=output/'ejecuciones'/run_id; folder.mkdir(parents=True,exist_ok=False)
+    report=dict(run_id=run_id,inicio=now(),estado='RUNNING',etapas=[],controles=[],grupo=cfg['group'],destino=cfg['destination'],
+        git=git_state(),config_sha256=sha256(config_path),codigo_sha256={f:sha256(ROOT/f) for f in ['pipeline.py','fuentes.py','validacion_migracion.py','utilidades.py']},
+        dependencias={n:importlib.metadata.version(n) for n in ['pandas','numpy','openpyxl','statsmodels','scipy']})
+    write_json(folder/'config.json',cfg)
+    def stage(name): report['etapas'].append(dict(etapa=name,fin=now()))
     try:
-        source = ROOT / cfg["source"]["path"]
-        report["fuente"] = {"ruta": cfg["source"]["path"], "sha256": sha256(source), "hoja": cfg["source"]["sheet"]}
-        df = pd.read_excel(source, sheet_name=cfg["source"]["sheet"])
-        report["filas_fuente"] = len(df)
-        stage("lectura")
-        checks, dates = validate_data(df, cfg)
-        report["controles"] = checks
-        write_json(folder / "calidad.json", checks)
-        if any(c["estado"] == "FAIL" for c in checks):
-            raise ValueError("Control crítico fallido: " + ", ".join(c["control"] for c in checks if c["estado"] == "FAIL"))
-        stage("validacion")
-        monthly = prepare(df, dates, cfg)
-        monthly.rename("visitantes").to_csv(folder / "serie_mensual.csv")
-        stage("preparacion")
-        evaluation, metrics, forecast, parameters = estimate(monthly, cfg)
-        evaluation.to_csv(folder / "evaluacion.csv", index=False)
-        write_json(folder / "metricas.json", metrics)
-        write_json(folder / "parametros.json", parameters)
-        stage("ajuste_evaluacion")
-        forecast = forecast.assign(destino=cfg["scope"]["destination"], unidad=cfg["scope"]["unit"],
-                                   run_id=run_id, fecha_generacion=now(), version=cfg["procedure"]["version"], tipo="estimado")
-        integrity = (len(forecast) == cfg["procedure"]["forecast_months"] and not forecast.periodo.duplicated().any()
-                     and np.isfinite(forecast.valor).all() and forecast.valor.ge(0).all()
-                     and np.isfinite(evaluation[["observado", "estimado", "referencia"]]).all().all())
-        forecast.to_csv(folder / "estimaciones.csv", index=False)
-        stage("estimaciones")
-        baseline, candidate = metrics["referencia"]["MAE"], metrics["estimado"]["MAE"]
-        accepted = bool(integrity and candidate <= baseline * cfg["acceptance"]["max_mae_ratio_to_baseline"])
-        report.update(metricas=metrics, integridad_salidas=bool(integrity), aprobado=accepted,
-                      estado="APPROVED" if accepted else "REJECTED",
-                      motivo="Regla de calidad, integridad y MAE aplicada sin alterar umbral")
-        # Los archivos están completos antes de sustituir atómicamente el manifiesto.
+        report['fuentes']={n:dict(ruta=s['path'],sha256=sha256(ROOT/s['path'])) for n,s in {'migration':cfg['migration'],**cfg['sources']}.items()}
+        tables=read_sources(cfg,ROOT); report['filas']={n:len(d) for n,d in tables.items()}; stage('lectura')
+        checks,dates=check_sources(tables,cfg); report['controles']=checks; write_json(folder/'calidad.json',checks)
+        if any(c['estado']=='FAIL' for c in checks):
+            raise ValueError('Control crítico fallido: '+', '.join(c['fuente']+'/'+c['control'] for c in checks if c['estado']=='FAIL'))
+        stage('validacion'); prepared=prepare_sources(tables,dates,cfg)
+        for name,frame in prepared.items(): frame.to_csv(folder/(name+'.csv'),index=name in ['nacional','movilidad','tikal','ocupacion'])
+        stage('preparacion_fuentes')
+        evaluation,national_evaluation,metrics,models=evaluate(prepared['nacional'],prepared['movilidad'],cfg)
+        evaluation.to_csv(folder/'evaluacion_destinos.csv',index=False); national_evaluation.to_csv(folder/'evaluacion_nacional.csv',index=False)
+        write_json(folder/'metricas.json',metrics); write_json(folder/'ajustes_validacion.json',models); stage('validacion_temporal')
+        forecast,factors,parameters=estimate(prepared['nacional'],prepared['movilidad'],cfg)
+        forecast=forecast.assign(run_id=run_id,fecha_generacion=now(),version=cfg['procedure']['version'])
+        write_json(folder/'factores.json',factors); write_json(folder/'parametros.json',parameters)
+        forecast.to_csv(folder/'estimaciones.csv',index=False); triangulate(prepared,forecast).to_csv(folder/'triangulacion.csv',index=False)
+        airline=prepared['aerolineas'].groupby(['periodo','Tipo de Flujo']).Pasajeros.sum().rename('pasajeros_aerolineas').reset_index().rename(columns={'Tipo de Flujo':'flujo'})
+        comparison=prepared['aeropuerto'].merge(airline,on=['periodo','flujo'],how='inner'); comparison['diferencia']=comparison.pasajeros-comparison.pasajeros_aerolineas
+        comparison.to_csv(folder/'conciliacion_aeropuerto.csv',index=False); stage('estimacion_y_triangulacion')
+        integrity=bool(len(forecast)==len(cfg['scope']['destinations'])*len(cfg['procedure']['targets']) and
+            not forecast.duplicated(['destino','periodo']).any() and np.isfinite(forecast.valor).all() and forecast.valor.ge(0).all())
+        accepted=bool(integrity and all(m['aceptado'] for m in metrics['destinos'].values()))
+        report.update(estado='APPROVED' if accepted else 'REJECTED',aprobado=accepted,integridad_salidas=integrity,metricas=metrics,
+            limitaciones=['Solo tres meses de validación del destino; no hay enero-febrero observados de movilidad.',
+            'Escala empírica con poblaciones diferentes, no participación de mercado.',
+            'Destinos potencialmente solapados; no sumarlos como personas únicas.',
+            'Ratios Tikal/movilidad no identifican compradores individuales.'])
         if accepted:
-            manifest = {"run_id": run_id, "estimaciones": str((folder / "estimaciones.csv").relative_to(output)),
-                        "metricas": str((folder / "metricas.json").relative_to(output)), "fecha": now()}
-            write_json(output / "aprobada.json", manifest)
-            report["publicacion"] = "Manifiesto de versión aprobada actualizado"
-        else:
-            report["publicacion"] = "Candidata rechazada; se conserva el manifiesto aprobado existente, si hay"
-        stage("decision_publicacion")
+            write_json(output/'aprobada.json',dict(run_id=run_id,destino=cfg['destination'],estimaciones=str((folder/'estimaciones.csv').relative_to(output)),metricas=str((folder/'metricas.json').relative_to(output)),fecha=now()))
+            report['publicacion']='Manifiesto de Petén actualizado'
+        else: report['publicacion']='Candidata rechazada; se conserva la versión aprobada previa, si existe'
+        stage('decision_aceptacion')
     except Exception as exc:
-        report.update(estado="FAILED", error=f"{type(exc).__name__}: {exc}",
-                      publicacion="Sin reemplazo de versión aprobada")
+        report.update(estado='FAILED',error=f'{type(exc).__name__}: {exc}',publicacion='Sin reemplazo de versión aprobada')
     finally:
-        report["fin"] = now()
-        write_json(folder / "ejecucion.json", report)
-    print(json.dumps({"run_id": run_id, "estado": report["estado"], "reporte": str(folder / "ejecucion.json"),
-                      "error": report.get("error"), "metricas": report.get("metricas")}, ensure_ascii=False, indent=2))
-    return 1 if report["estado"] == "FAILED" else 0
+        report['fin']=now(); write_json(folder/'ejecucion.json',report)
+    print(json.dumps(dict(run_id=run_id,estado=report['estado'],reporte=str(folder/'ejecucion.json'),error=report.get('error'),metricas=report.get('metricas')),ensure_ascii=False,indent=2))
+    return 1 if report['estado']=='FAILED' else 0
 
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--config", type=Path, default=ROOT / "config.json")
-    args = parser.parse_args()
-    sys.exit(run(args.config))
+if __name__=='__main__':
+    parser=argparse.ArgumentParser(description=__doc__); parser.add_argument('--config',type=Path,default=ROOT/'config.json')
+    sys.exit(run(parser.parse_args().config))
