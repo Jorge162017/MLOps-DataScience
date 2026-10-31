@@ -2,7 +2,7 @@
 
 Jorge Luis Lopez · 221038 · Grupo 2 · CC3066 Data Science
 
-Pipeline reproducible, seis controles por fuente, evaluación temporal, MLflow, tablero, monitoreo, versiones verificadas y despliegue local con Docker. El informe completo es `INFORME_LAB11.pdf`; `AVANCE_LAB11.pdf` conserva la entrega de la fase 1.
+Pipeline reproducible, seis controles por fuente, evaluación temporal, MLflow, tablero, monitoreo, versiones verificadas y despliegue local con Docker. El informe completo es `INFORME_LAB11.pdf`.
 
 **Resultado real:** el candidato no supera al último valor observado en Flores y El Remate. Se conserva como REJECTED y no se publica. El tablero informa que no hay estimaciones aprobadas y permite explorar los datos observados validados. La recuperación se demuestra con fuentes sintéticas aisladas y claramente identificadas, sin alterar el criterio real.
 
@@ -131,7 +131,7 @@ La administración está oculta para usuarios habituales y se habilita únicamen
 - `config.json`: rutas, coberturas, períodos, supuestos y reglas.
 - `demo.py`, `test_pipeline.py`, `test_fase2.py`: demostración y 26 pruebas.
 - `Dockerfile`, `.dockerignore`, `compose.yaml`, `contenedor.py`: entorno y servicios.
-- `evidencia_avance.json`, `evidencia_fase2.json`: resúmenes versionables. Los registros completos permanecen en almacenamiento local.
+- `evidencia_fase2.json`: evidencia consolidada de ambas fases. Los registros completos permanecen en almacenamiento local.
 - `INFORME_LAB11.md`, `INFORME_LAB11.pdf`, `diagrama_flujo.svg`: documentación técnica final.
 
 Cada carpeta de ejecución contiene datos preparados, `calidad.json`, `config.json`, `ejecucion.json`, `monitoreo.json`, evaluación, métricas, parámetros, factores y candidatas. Se guardan en `resultados_peten/ejecuciones/<run_id>` (Docker: `/state/resultados_peten/...`). Las fuentes no se copian a la imagen. `versiones/` contiene las versiones aprobadas y sus hashes; `historial/` registra publicación/restauración. Sin `aprobada.json`, no hay estimaciones aprobadas disponibles. `observados.json` permite explorar datos validados sin exponer candidatas rechazadas.

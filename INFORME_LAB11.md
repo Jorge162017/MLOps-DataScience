@@ -121,7 +121,7 @@ Se verificaron dos ejecuciones completas con datos/configuración idénticos: di
 
 Se introdujo una clave duplicada en una copia real del Excel mensual. El pipeline detectó mobility/unicidad, terminó FAILED antes de evaluar y no generó métricas. No cambió el manifiesto aprobado existente ni creó uno para la candidata rechazada. La prueba sintética automatizada también verifica la conservación de una versión previa.
 
-La fase 1 aporta 15 de las 26 pruebas automatizadas aprobadas, incluyendo contratos de las ocho fuentes, cobertura por sitio, tipos, fechas fraccionarias, duplicados con valor distinto, ceros/faltantes permitidos, negativos/no finitos, coherencia de Tikal, separación de unidades, reconstrucción 2023, ausencia de fuga temporal y fallo seguro. Los detalles, identificadores y métricas están en evidencia_avance.json y en las carpetas locales de ejecución.
+La fase 1 aporta 15 de las 26 pruebas automatizadas aprobadas, incluyendo contratos de las ocho fuentes, cobertura por sitio, tipos, fechas fraccionarias, duplicados con valor distinto, ceros/faltantes permitidos, negativos/no finitos, coherencia de Tikal, separación de unidades, reconstrucción 2023, ausencia de fuga temporal y fallo seguro. Los detalles, identificadores y métricas están en evidencia_fase2.json (sección evidencia_fase1) y en las carpetas locales de ejecución.
 
 
 ## 9. MLflow y trazabilidad
