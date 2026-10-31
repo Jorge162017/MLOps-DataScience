@@ -5,7 +5,7 @@
 <rect width="1100" height="1190" fill="#f6f8fa"/>
 <g font-family="Arial, sans-serif" fill="#153747">
 <text x="50" y="46" font-size="26" font-weight="bold">Lab 11 · Tikal y Flores (Petén) · Grupo 2</text>
-<text x="50" y="76" font-size="16">Fase 1 · Fuentes separadas, estimación temporal y regla de aceptación</text>
+<text x="50" y="76" font-size="16">Flujo completo · MLflow, monitoreo, versiones y consulta local</text>
 <g fill="#ffffff" stroke="#277865" stroke-width="2">
 <rect x="80" y="110" width="320" height="76" rx="10"/>
 <rect x="440" y="110" width="320" height="76" rx="10"/>
@@ -20,12 +20,12 @@
 <g text-anchor="middle" font-size="18">
 <text x="240" y="140">Ocho fuentes institucionales</text><text x="240" y="166" font-size="15">Migración · movilidad · Tikal · AIMM · hoteles</text>
 <text x="600" y="140">config.json</text><text x="600" y="166" font-size="15">Corte dic 2025 · horizonte ene–feb 2026</text>
-<text x="420" y="259">Lectura y trazabilidad</text><text x="420" y="282" font-size="15">SHA-256 · configuración · versiones · Git</text>
+<text x="420" y="259">MLflow · lectura y trazabilidad</text><text x="420" y="282" font-size="15">Runs · artefactos · SHA-256 · parámetros · Git</text>
 <text x="420" y="371">Seis controles en cada fuente (48)</text><text x="420" y="395" font-size="15">Esquema · fechas · clave · faltantes</text><text x="420" y="415" font-size="15">Valores / denominadores · regla metodológica</text>
 <text x="420" y="498">Preparación por destino y por unidad</text><text x="420" y="522" font-size="15">Sitios separados · pasajeros ≠ operaciones</text>
 <text x="420" y="611">Holt–Winters + escala por destino</text><text x="420" y="635" font-size="15">Migración 2023–2025 · escala sep–dic 2025</text><text x="420" y="655" font-size="15">Validación oct–dic 2025 sin información futura</text>
 <text x="420" y="739">Estimaciones candidatas</text><text x="420" y="763" font-size="15">Enero–febrero 2026 · tres destinos separados</text>
-<text x="420" y="851">Autorizar publicación</text><text x="420" y="876" font-size="15">Calidad + integridad + MAE ≤ último valor</text><text x="420" y="895" font-size="15">Candidata actual: rechazada en dos destinos</text>
+<text x="420" y="851">Monitoreo y autorización</text><text x="420" y="876" font-size="15">Calidad + integridad + MAE ≤ último valor</text><text x="420" y="895" font-size="15">Candidata actual: rechazada en dos destinos</text>
 <text x="420" y="979">resultados_peten/aprobada.json</text><text x="420" y="1002" font-size="15">Sin publicación si falla cualquier destino</text>
 </g>
 <g stroke="#416476" stroke-width="2" fill="none" marker-end="url(#arrow)">
@@ -38,6 +38,6 @@
 <g fill="#fff1e0" stroke="#ad7025" stroke-width="2"><rect x="715" y="344" width="335" height="98" rx="10"/><rect x="715" y="824" width="335" height="98" rx="10"/></g>
 <g font-size="17" text-anchor="middle"><text x="882" y="373">Fallo crítico → detener</text><text x="882" y="399" font-size="15">Guardar reporte y causa</text><text x="882" y="425" font-size="15">Conservar versión aprobada</text><text x="882" y="853">Rechazo → conservar candidata</text><text x="882" y="879" font-size="15">Sin cambiar el umbral</text><text x="882" y="905" font-size="15">Conservar versión aprobada</text></g>
 <rect x="220" y="1064" width="400" height="70" rx="10" fill="#eef2f7" stroke="#77899d" stroke-width="2" stroke-dasharray="7 5"/>
-<text x="420" y="1093" text-anchor="middle" font-size="18">Consulta desde el tablero</text><text x="420" y="1119" text-anchor="middle" font-size="15">Conexión pendiente para la entrega final</text>
-<text x="50" y="1170" font-size="14">Cada ejecución registra inicio, fin, etapas, calidad, parámetros, métricas y resultado de publicación.</text>
+<text x="420" y="1093" text-anchor="middle" font-size="18">Consulta y restauración en tablero</text><text x="420" y="1119" text-anchor="middle" font-size="15">Solo versión aprobada · observados validados</text>
+<text x="50" y="1170" font-size="14">Docker local · SQLite y artefactos persistentes · restauración sintética aislada y verificada</text>
 </g></svg>

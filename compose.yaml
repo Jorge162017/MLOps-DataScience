@@ -47,7 +47,7 @@ services:
     profiles: ["demo"]
     environment:
       <<: *env
-      LAB_OUTPUT: /state/demo_sintetico
+      LAB_OUTPUT: /state/demo_sintetico/salidas
       LAB_ENVIRONMENT: synthetic
       LAB_ADMIN: "1"
     command: ["streamlit", "run", "app.py", "--server.address=0.0.0.0", "--server.port=8502"]

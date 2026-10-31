@@ -1,89 +1,168 @@
-# Laboratorio 11 — Tikal y Flores (Petén)
+# Laboratorio 11 — Observatorio de Tikal y Flores (Petén)
 
 Jorge Luis Lopez · 221038 · Grupo 2 · CC3066 Data Science
 
-La fase 1 implementa la estimación de movilidad de enero-febrero de 2026 para los tres sitios asignados, la triangulación con Tikal y hoteles, la reconstrucción de pasajeros AIMM 2023, el análisis de operadores y la validación temporal. Los sitios se mantienen separados; no hay un total de personas únicas de Petén.
+Pipeline reproducible, seis controles por fuente, evaluación temporal, MLflow, tablero, monitoreo, versiones verificadas y despliegue local con Docker. El informe completo es `INFORME_LAB11.pdf`; `AVANCE_LAB11.pdf` conserva la entrega de la fase 1.
 
-**Resultado:** la candidata conjunta fue rechazada por desempeño en dos de los tres sitios. El pipeline conserva las estimaciones como candidatas y no actualiza el manifiesto aprobado. Este resultado aplica la regla definida; no es un fallo técnico.
+**Resultado real:** el candidato no supera al último valor observado en Flores y El Remate. Se conserva como REJECTED y no se publica. El tablero informa que no hay estimaciones aprobadas y permite explorar los datos observados validados. La recuperación se demuestra con fuentes sintéticas aisladas y claramente identificadas, sin alterar el criterio real.
 
-## Ejecución
+## Requisitos y fuentes
 
-Usar Python 3.13 desde la raíz:
+Docker Desktop con el motor iniciado y Docker Compose v2. Para ejecución sin contenedores: Python 3.13 y las versiones de `requirements.lock`. La imagen base está fijada por digest y todas las dependencias están fijadas por versión.
+
+Los datos institucionales deben estar disponibles en una carpeta autorizada con esta estructura relativa:
+
+```text
+BD_moviidad_mensual.xlsx
+indice_ocupacion_mensual_2023_2025_1.csv
+oferta_hotelera_2022_2026.csv
+Peten/Visitantes_Tikal_2017-2026.xlsx
+Peten/AIMM_Consolidado_2022-2025.xlsx
+Peten/AIMM_Aerolineas_2023-2026.xlsx
+Peten/AIMM_Operaciones_Aeronauticas_2022-2026.xlsx
+Lab10-DataScience/referencias/lab1/Laboratorio 1. Series de Tiempo 2026 - Base_Migracion_2009-2026jun.xlsx
+```
+
+`BD_moviidad_mensual.xlsx` conserva su nombre original. La hoja se llama `Peten`. La base de Migración puede estar en otra ubicación si se ajusta `migration.path` en `config.json`. El código del Lab 10 no es una dependencia; solo se necesita su Excel institucional. La encuesta de Petén se conserva como antecedente opcional y no se extrapola sin diseño y ponderación justificados.
+
+Los Excel/CSV originales, las salidas y los registros MLflow están excluidos de Git. El Dockerfile usa una lista explícita de código/configuración; el contexto no contiene datos institucionales.
+
+## Ejecutar con Docker
+
+Desde la raíz del repositorio, crear `.env` usando `.env.example`. `DATOS_DIR` es la carpeta que contiene la estructura anterior; se monta en `/datos` en **solo lectura**. Si los archivos están en la raíz actual, `DATOS_DIR=.`. Las rutas internas de las fuentes en `config.json` se mantienen relativas.
+
+```sh
+GIT_COMMIT=$(git rev-parse HEAD) docker compose build
+GIT_COMMIT=$(git rev-parse HEAD) docker compose up -d tablero mlflow
+GIT_COMMIT=$(git rev-parse HEAD) docker compose run --rm pipeline
+```
+
+Abrir:
+
+- Tablero: http://localhost:8501
+- MLflow: http://localhost:5000
+
+Los puertos se publican únicamente en la interfaz local. El experimento real se llama `Peten-Grupo2`. Cada ejecución registra ID, commit, hashes de código/fuentes/configuración, períodos, parámetros, métricas, controles, estimaciones y archivos necesarios para reproducir el procedimiento. Una ejecución fallida antes de evaluar queda FAILED, con causa y sin métricas predictivas inventadas; una candidata evaluada pero rechazada queda FINISHED con etiqueta `pipeline.decision=REJECTED`.
+
+La salida del comando distingue FAILED, REJECTED y APPROVED. FAILED devuelve código 1. Las otras decisiones devuelven 0 porque el procedimiento terminó; eso no significa que la candidata haya sido aprobada.
+
+Consultar salud y ejecutar pruebas:
+
+```sh
+docker compose ps
+docker compose run --rm pruebas
+```
+
+## Persistencia y detención
+
+El volumen `lab_state` conserva `/state/resultados_peten`, `/state/mlflow_data` y `/state/demo_sintetico` incluso después de eliminar/recrear contenedores. Los artefactos y SQLite comparten ese volumen entre el pipeline y MLflow. El registro utiliza SQLite local y artefactos locales; no se envían datos a un proveedor de tracking externo.
+
+```sh
+docker compose down
+docker compose --profile demo up -d tablero mlflow demo
+```
+
+`down` conserva el volumen. No usar `down -v` para una detención habitual: esa opción elimina el almacenamiento del proyecto. Para comprobar persistencia se compararon IDs MLflow y la versión restaurada antes y después de recrear los servicios.
+
+## Demostrar fallo, recuperación y restauración
+
+```sh
+docker compose run --rm pipeline python contenedor.py demo
+docker compose --profile demo up -d demo
+```
+
+Abrir http://localhost:8502. Esta interfaz muestra un aviso permanente de **DATOS SINTÉTICOS**. La demostración usa un experimento separado `Peten-Grupo2-SINTETICO` y una carpeta diferente de producción.
+
+`demo.py` genera las ocho fuentes sintéticas, obtiene dos versiones aprobadas con la misma regla, introduce una clave duplicada en el Excel mensual, ejecuta y comprueba el fallo, verifica el hash del manifiesto previo, corrige la fuente, vuelve a ejecutar y restaura la primera versión. Guarda `evidencia_demo.json`. No cambia los umbrales para aprobar datos reales ni modifica los archivos institucionales.
+
+En el tablero de demostración, abrir «Administración local · restaurar versión», elegir una versión y pulsar «Restaurar versión». La gráfica consulta inmediatamente el archivo restaurado. Las pruebas de interfaz verifican el cambio y que los filtros no entrenan modelos.
+
+También se puede restaurar por comando, reemplazando VERSION por uno de los identificadores mostrados en la demo:
+
+```sh
+docker compose exec demo python versiones.py --output /state/demo_sintetico/salidas --restore VERSION --environment synthetic
+```
+
+Para una futura versión real aprobada, usar `/state/resultados_peten` y `--environment production`. Hoy no hay una versión real aprobada que restaurar. El lector verifica hashes, metadatos, controles, aceptación y entorno antes de cambiar el manifiesto. Un archivo alterado, una ejecución rechazada o una versión sintética no pueden restaurarse como producción. Las versiones anteriores no se sobrescriben. Las operaciones de pipeline/restauración usan un bloqueo del almacén y el manifiesto se reemplaza atómicamente.
+
+## Monitoreo
+
+Cada ejecución escribe `monitoreo.json` con:
+
+- **Actualización:** cobertura máxima de cada fuente frente a `monitoring.expected_latest`, y períodos de salida frente a enero-febrero de 2026. La cobertura esperada procede de los archivos y no del reloj: esta es una estimación histórica, no una afirmación de actualidad de octubre de 2026.
+- **Calidad:** faltantes permitidos/críticos, duplicados, cobertura y cambios respecto al control anterior.
+- **Resultados:** valores negativos/no finitos y variaciones superiores al 50% frente al último observado o a una versión aprobada comparable. El umbral requiere revisión ante cambios amplios en series cortas/estacionales; no se interpreta como pérdida de precisión.
+
+Solo se actualizan MAE/RMSE sobre observaciones comparables. No se calcula error de movilidad para enero-febrero de 2026 porque faltan sus observados. Una alarma crítica bloquea publicación. Los ceros y las ausencias conservan significados distintos.
+
+## Ejecución sin Docker
 
 ```sh
 python3 -m venv .venv
 source .venv/bin/activate
-python -m pip install -r requirements.txt
+python -m pip install -r requirements.lock
 python pipeline.py
-python -m unittest -v test_pipeline
+streamlit run app.py
 ```
 
-El pipeline lee `config.json`; otra configuración se indica con `python pipeline.py --config otra_config.json`. Las rutas relativas se resuelven desde la raíz. Los archivos intermedios no requieren edición manual ni una sesión de notebook. Un fallo técnico o de calidad devuelve código 1; una candidata aprobada o rechazada tras evaluación devuelve código 0. Consultar el campo `estado`.
+En otra terminal, desde la misma raíz:
 
-## Fuentes institucionales locales
+```sh
+source .venv/bin/activate
+mlflow server --backend-store-uri sqlite:///mlflow_data/mlflow.db --host 127.0.0.1 --port 5000 --no-serve-artifacts
+```
 
-Las rutas son configurables. Deben proporcionarse localmente o mediante montaje autorizado; no se incluyen en Git.
+La demo local:
 
-- `BD_moviidad_mensual.xlsx`, hoja `Peten`: movilidad mensual de los tres destinos. Se conserva el nombre original del archivo.
-- `indice_ocupacion_mensual_2023_2025_1.csv`: ocupación, filtro `Petén`.
-- `oferta_hotelera_2022_2026.csv`: capacidad por corte, filtro `Petén`.
-- `Peten/Visitantes_Tikal_2017-2026.xlsx`.
-- `Peten/AIMM_Consolidado_2022-2025.xlsx`.
-- `Peten/AIMM_Aerolineas_2023-2026.xlsx`.
-- `Peten/AIMM_Operaciones_Aeronauticas_2022-2026.xlsx`.
-- Base de Migración en `Lab10-DataScience/referencias/lab1/Laboratorio 1. Series de Tiempo 2026 - Base_Migracion_2009-2026jun.xlsx`.
+```sh
+python demo.py
+LAB_OUTPUT=demo_sintetico/salidas LAB_ENVIRONMENT=synthetic LAB_ADMIN=1 streamlit run app.py --server.port 8502
+```
 
-El código del Lab 10 y su entorno no son dependencias del pipeline: únicamente se utiliza su Excel institucional. Puede colocarse la base en otra carpeta y modificar `migration.path`. La encuesta del ZIP se conserva como antecedente opcional, sin extrapolar sus respuestas.
+La administración está oculta para usuarios habituales y se habilita únicamente con `LAB_ADMIN=1`. Los detalles de runs/parámetros se consultan en MLflow. El producto muestra destinos, cobertura, fecha de actualización, unidades, MAE y sus limitaciones; no ofrece descarga masiva de microdatos.
 
-## Código y documentos
+## Archivos y resultados
 
-- `pipeline.py`: configuración, ajuste, reparto, validación, triangulación y decisión.
-- `fuentes.py`: lectura, seis controles por fuente y preparación de las ocho fuentes.
-- `validacion_migracion.py`: contrato de la serie nacional mensual.
-- `utilidades.py`: escritura atómica, huellas y procedencia Git.
-- `config.json`: fuentes, cobertura, períodos, modelo y umbral previo de aceptación.
-- `requirements.txt`: versiones directas usadas, incluido SciPy para el ajuste.
-- `test_pipeline.py`: 15 pruebas sintéticas sin dependencia de archivos institucionales.
-- `AVANCE_LAB11.md` y `AVANCE_LAB11.pdf`: informe actualizado de la fase 1.
-- `diagrama_flujo.svg`: el mismo diagrama incluido en el PDF.
-- `evidencia_avance.json`: controles, métricas, factores, candidatas, reproducibilidad y prueba de fallo.
+- `pipeline.py`, `fuentes.py`, `validacion_migracion.py`: ajuste, fuentes y 48 controles.
+- `seguimiento.py`: registro y consulta MLflow.
+- `monitoreo.py`: actualización, calidad y resultados.
+- `versiones.py`: versiones inmutables verificadas y restauración.
+- `tablero.py`, `app.py`: lectura de observados validados y estimaciones aprobadas; no importan ni ejecutan el ajuste.
+- `config.json`: rutas, coberturas, períodos, supuestos y reglas.
+- `demo.py`, `test_pipeline.py`, `test_fase2.py`: demostración y 26 pruebas.
+- `Dockerfile`, `.dockerignore`, `compose.yaml`, `contenedor.py`: entorno y servicios.
+- `evidencia_avance.json`, `evidencia_fase2.json`: resúmenes versionables. Los registros completos permanecen en almacenamiento local.
+- `INFORME_LAB11.md`, `INFORME_LAB11.pdf`, `diagrama_flujo.svg`: documentación técnica final.
 
-## Método y aislamiento temporal
+Cada carpeta de ejecución contiene datos preparados, `calidad.json`, `config.json`, `ejecucion.json`, `monitoreo.json`, evaluación, métricas, parámetros, factores y candidatas. Se guardan en `resultados_peten/ejecuciones/<run_id>` (Docker: `/state/resultados_peten/...`). Las fuentes no se copian a la imagen. `versiones/` contiene las versiones aprobadas y sus hashes; `historial/` registra publicación/restauración. Sin `aprobada.json`, no hay estimaciones aprobadas disponibles. `observados.json` permite explorar datos validados sin exponer candidatas rechazadas.
 
-Se reutiliza Holt-Winters aditivo amortiguado del Lab 1, con ciclo de 12 meses. El ajuste final usa enero de 2023-diciembre de 2025 y pronostica enero-febrero de 2026. El factor de cada sitio es la razón de las sumas de movilidad y Migración en los mismos meses observados anteriores al corte; para los objetivos son septiembre-diciembre de 2025.
+## Registros completos para revisión
 
-La escala empírica no es una participación de mercado: movilidad incluye visitantes nacionales y Migración representa entradas internacionales. No se fuerza la suma de factores a uno. La evaluación de ese supuesto es parte del resultado.
+Exportar desde Docker:
 
-La validación de destinos oculta octubre-noviembre de 2025 desde el corte de septiembre, y diciembre desde noviembre. El factor y el modelo se ajustan solo con información anterior al bloque. La referencia conserva el último valor observado antes del bloque. Hay solo tres meses evaluables por sitio, una limitación sustancial. No se utilizan marzo-agosto de 2026 para calibrar las estimaciones de enero-febrero.
+```sh
+docker compose exec mlflow python exportar_entrega.py --output /state/resultados_peten --demo /state/demo_sintetico --zip /state/lab11_registros_y_resultados.zip
+docker compose cp mlflow:/state/lab11_registros_y_resultados.zip .entrega/lab11_registros_y_resultados.zip
+```
 
-La validación nacional cubre los 12 meses de 2025 en bloques de hasta dos meses, frente al mismo mes del año anterior. Se guardan MAE y RMSE. No se calcula error de movilidad para enero-febrero de 2026 porque faltan observaciones comparables.
+Crear antes la carpeta `.entrega` si no existe. El paquete incluye una copia consistente de SQLite, artefactos MLflow, resultados, versiones y evidencia sintética; excluye los Excel originales. Mantenerlo en el medio institucional autorizado, fuera de Git. El paquete ya generado localmente está en `.entrega/`. Incluye registros Docker y, como `registros_adicionales_macOS.zip`, los registros de las ejecuciones locales, además de capturas y la comprobación de persistencia.
 
-La regla exige controles críticos válidos, salidas íntegras y MAE no superior al referente en cada sitio, con al menos tres meses de validación. La candidata pasa en Mundo Maya Aeropuerto y falla en Flores y El Remate: el conjunto se rechaza. No se modifica el umbral ni se publica un modelo alternativo seleccionado después de ver los errores.
+Restaurar el paquete en una carpeta nueva (reescribe las URI locales de artefactos):
 
-## Salidas
+```sh
+python importar_entrega.py .entrega/lab11_registros_y_resultados.zip /tmp/lab11-revision
+LAB_STATE=/tmp/lab11-revision python seguimiento.py
+mlflow server --backend-store-uri sqlite:////tmp/lab11-revision/mlflow_data/mlflow.db --host 127.0.0.1 --port 5001 --no-serve-artifacts
+```
 
-Cada ejecución crea `resultados_peten/ejecuciones/<run_id>/` con:
+La restauración del paquete no recalcula modelos. `LAB_OUTPUT=/tmp/lab11-revision/resultados_peten streamlit run app.py --server.port 8503` consulta el resultado real; para la demo usar `LAB_ENVIRONMENT=synthetic` y `LAB_OUTPUT=/tmp/lab11-revision/demo_sintetico/salidas`.
 
-- `ejecucion.json`, `config.json`, `calidad.json`: etapas, fechas UTC, estado, huellas de código/fuentes, versiones, estado de Git y 48 controles (seis en cada fuente).
-- `nacional.csv`, `movilidad.csv`, `tikal.csv`, `ocupacion.csv`, `capacidad.csv`: fuentes preparadas, conservando sus unidades y coberturas.
-- `aeropuerto.csv`: serie 2022-abril de 2026 por Entrada/Salida, identificando reconstrucción 2023 y extensión parcial 2026.
-- `aerolineas.csv`, `operadores.csv`: pasajeros y operaciones en tablas separadas.
-- `conciliacion_aeropuerto.csv`: comparación de fuentes superpuestas; no se suman.
-- `evaluacion_destinos.csv`, `evaluacion_nacional.csv`, `metricas.json`: predicciones, referentes, cortes, factores y errores.
-- `ajustes_validacion.json`, `parametros.json`, `factores.json`: parámetros del modelo, escala numérica y calibración reproducible.
-- `estimaciones.csv`: seis candidatas con destino, período, valor, unidad, corte, factor, run_id, fecha y versión.
-- `triangulacion.csv`: boletos, movilidad observada/candidata, pasajeros de entrada y ocupación disponible, con ausencias preservadas.
+## Verificación y límites
 
-La capacidad se conserva por corte, sin sumarla entre años ni interpolarla como observaciones mensuales. Los ratios Tikal/movilidad son razones entre fuentes, no porcentajes de compradores únicos. Las filas que usan denominadores estimados se etiquetan como candidatas.
+Se probaron 26 casos localmente y en Docker, incluidos falla segura de MLflow, separación de entornos, alteración de archivos, restauración desde el tablero y ausencia de entrenamiento al filtrar. La construcción y el pipeline se ejecutaron desde un `git archive` limpio, montando únicamente las fuentes autorizadas. Se verificó persistencia al recrear servicios y recuperación del paquete exportado.
 
-Solo si todos los sitios pasan se reemplaza atómicamente `resultados_peten/aprobada.json`. Ante fallo o rechazo se conserva la versión anterior; si no existe, no hay estimaciones aprobadas disponibles. `resultados/` conserva el antecedente nacional y no se utiliza como aprobación de Petén. La integración con Streamlit está pendiente.
+La candidata de Petén sigue rechazada. La validación por destino tiene solo tres meses (octubre-diciembre de 2025), con poca historia de calibración; no garantiza precisión futura. La escala nacional-destino no es una participación de mercado. Los ratios Tikal/movilidad no identifican compradores únicos. Pasajeros, vuelos, boletos y visitantes no se suman entre sí.
 
-## Verificación
+Dos ejecuciones con la misma configuración y plataforma producen resultados numéricos equivalentes. Las diferencias macOS/Linux del ajuste optimizado se cuantifican en el informe, sin afirmar identidad entre plataformas ni cambiar la decisión de aceptación.
 
-Las pruebas cubren las ocho fuentes, cobertura por sitio, tipos, fechas fraccionarias, duplicados con valores diferentes, faltantes permitidos/críticos, negativos/no finitos, ceros, denominadores, coherencia de Tikal, reconstrucción 2023 sin doble conteo y separación de unidades. También modifican los datos posteriores al corte para comprobar que no afectan las estimaciones; ocultan bloques de dos meses y verifican que una ejecución fallida no reemplaza un manifiesto previo ni inventa métricas.
-
-La evidencia local incluye dos ejecuciones completas equivalentes con tolerancia absoluta `1e-8` y relativa cero, y una ejecución de fallo con una copia del Excel mensual que contiene una clave duplicada. Las diferencias numéricas observadas entre las ejecuciones válidas fueron cero.
-
-## Fase 2
-
-Quedan MLflow, integración del manifiesto con el tablero, monitoreo, restauración demostrada desde la interfaz, Docker con persistencia y comprobación desde una copia limpia. El repositorio debe ser privado y conceder acceso a docentes y auxiliares. Los datos y resultados institucionales se comparten solo por el medio autorizado.
+Referencias de implementación: [MLflow Tracking](https://mlflow.org/docs/latest/ml/tracking/) y [pruebas de Streamlit](https://docs.streamlit.io/develop/api-reference/app-testing/st.testing.v1.apptest).
