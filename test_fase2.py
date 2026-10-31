@@ -78,7 +78,7 @@ class PhaseTwoTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             cfg['output_dir']=td;config=Path(td)/'config.json';write_json(config,cfg)
             pointer=Path(td)/'aprobada.json';write_json(pointer,dict(run_id='previa'));before=pointer.read_bytes()
-            with patch('pipeline.Tracker.record',side_effect=OSError('Seguimiento no disponible')),contextlib.redirect_stdout(io.StringIO()):
+            with patch.dict(os.environ,{'LAB_OUTPUT':td}),patch('pipeline.Tracker.record',side_effect=OSError('Seguimiento no disponible')),contextlib.redirect_stdout(io.StringIO()):
                 result=run(config)
             self.assertEqual(result,1);self.assertEqual(before,pointer.read_bytes())
             self.assertFalse(list((Path(td)/'versiones').glob('*')))

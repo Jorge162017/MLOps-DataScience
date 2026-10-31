@@ -155,7 +155,7 @@ class PetenTests(unittest.TestCase):
             pointer=Path(td)/'aprobada.json';p.write_json(pointer,dict(run_id='previa'));before=pointer.read_bytes()
             self.tables['mobility']=self.tables['mobility'].drop(columns='visitantes')
             cfg['environment']='synthetic';p.write_json(config,cfg)
-            env={'LAB_STATE':td,'MLFLOW_TRACKING_URI':'sqlite:///'+str(Path(td)/'mlflow.db'),'MLFLOW_ARTIFACT_ROOT':str(Path(td)/'artifacts')}
+            env={'LAB_STATE':td,'LAB_OUTPUT':td,'MLFLOW_TRACKING_URI':'sqlite:///'+str(Path(td)/'mlflow.db'),'MLFLOW_ARTIFACT_ROOT':str(Path(td)/'artifacts')}
             with patch.dict(os.environ,env),patch.object(p,'read_sources',return_value=self.tables),contextlib.redirect_stdout(io.StringIO()):status=p.run(config)
             self.assertEqual(status,1);self.assertEqual(pointer.read_bytes(),before)
             report=json.loads(next((Path(td)/'ejecuciones').glob('*/ejecucion.json')).read_text())
