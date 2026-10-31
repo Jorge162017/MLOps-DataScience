@@ -20,3 +20,10 @@ oferta_hotelera_2022_2026.csv
 indice_ocupacion_mensual_2023_2025_1.csv
 
 resultados_peten/
+
+mlflow_data/
+state/
+demo_sintetico/
+config_docker.json
+.env
+.entrega/

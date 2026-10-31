@@ -143,5 +143,20 @@
     "minimum_validation_months": 3,
     "rationale": "Cada destino debe tener al menos 3 meses evaluados, integridad y controles válidos, MAE no superior al último valor observado. Se exigen todos los destinos para publicar el conjunto; no se cambia la regla tras evaluar."
   },
-  "output_dir": "resultados_peten"
+  "output_dir": "resultados_peten",
+  "environment": "production",
+  "monitoring": {
+    "expected_latest": {
+      "migration": "2026-06-01",
+      "mobility": "2026-08-01",
+      "tikal": "2026-08-01",
+      "airport": "2025-12-01",
+      "airlines": "2026-04-01",
+      "operations": "2026-04-01",
+      "occupancy": "2025-12-01",
+      "capacity": "2026-01-01"
+    },
+    "max_relative_change": 0.5,
+    "rationale": "Variaciones mayores al 50% frente al último observado requieren revisión en series estacionales cortas; no se interpretan como error predictivo. Cobertura esperada según cada archivo institucional."
+  }
 }

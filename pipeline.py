@@ -3,6 +3,7 @@ import argparse
 from datetime import datetime, timezone
 import importlib.metadata
 import json
+import os
 from pathlib import Path
 import sys
 import uuid
@@ -11,7 +12,11 @@ import numpy as np
 import pandas as pd
 from statsmodels.tsa.holtwinters import ExponentialSmoothing
 from fuentes import read_sources, check_sources, prepare_sources
-from utilidades import ROOT, now, write_json, sha256, git_state
+from utilidades import ROOT, now, write_json, sha256, git_state,store_lock
+from seguimiento import Tracker
+from monitoreo import monitor
+from versiones import publish
+from tablero import observed_pointer
 
 
 def validate_config(cfg):
@@ -147,27 +152,34 @@ def triangulate(prepared,forecast):
     return combined.merge(entries,on='periodo',how='left')
 
 
-def run(config_path):
+def _run(config_path):
     cfg=json.loads(Path(config_path).read_text()); validate_config(cfg); np.random.seed(cfg['procedure']['seed'])
     run_id=datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S')+'-'+uuid.uuid4().hex[:8]
-    output=ROOT/cfg['output_dir']; folder=output/'ejecuciones'/run_id; folder.mkdir(parents=True,exist_ok=False)
+    output=Path(os.environ.get('LAB_OUTPUT',ROOT/cfg['output_dir'])); folder=output/'ejecuciones'/run_id; folder.mkdir(parents=True,exist_ok=False)
     report=dict(run_id=run_id,inicio=now(),estado='RUNNING',etapas=[],controles=[],grupo=cfg['group'],destino=cfg['destination'],
-        git=git_state(),config_sha256=sha256(config_path),codigo_sha256={f:sha256(ROOT/f) for f in ['pipeline.py','fuentes.py','validacion_migracion.py','utilidades.py']},
-        dependencias={n:importlib.metadata.version(n) for n in ['pandas','numpy','openpyxl','statsmodels','scipy']})
+        git=git_state(),config_sha256=sha256(config_path),codigo_sha256={f:sha256(ROOT/f) for f in ['pipeline.py','fuentes.py','validacion_migracion.py','utilidades.py','seguimiento.py','monitoreo.py','versiones.py']},
+        dependencias={n:importlib.metadata.version(n) for n in ['pandas','numpy','openpyxl','statsmodels','scipy','mlflow']})
     write_json(folder/'config.json',cfg)
     def stage(name): report['etapas'].append(dict(etapa=name,fin=now()))
+    tracker=None;published=False
+    pointer=output/'aprobada.json';previous_pointer=pointer.read_bytes() if pointer.exists() else None
+    tables={};checks=[];dates={}
     try:
+        tracker=Tracker(cfg,report);report['mlflow_run_id']=tracker.id;stage('inicio_mlflow')
         report['fuentes']={n:dict(ruta=s['path'],sha256=sha256(ROOT/s['path'])) for n,s in {'migration':cfg['migration'],**cfg['sources']}.items()}
         tables=read_sources(cfg,ROOT); report['filas']={n:len(d) for n,d in tables.items()}; stage('lectura')
         checks,dates=check_sources(tables,cfg); report['controles']=checks; write_json(folder/'calidad.json',checks)
         if any(c['estado']=='FAIL' for c in checks):
+            report['monitoreo']=monitor(cfg,tables,dates,checks,None,output)
+            write_json(folder/'monitoreo.json',report['monitoreo'])
             raise ValueError('Control crítico fallido: '+', '.join(c['fuente']+'/'+c['control'] for c in checks if c['estado']=='FAIL'))
         stage('validacion'); prepared=prepare_sources(tables,dates,cfg)
         for name,frame in prepared.items(): frame.to_csv(folder/(name+'.csv'),index=name in ['nacional','movilidad','tikal','ocupacion'])
         stage('preparacion_fuentes')
         evaluation,national_evaluation,metrics,models=evaluate(prepared['nacional'],prepared['movilidad'],cfg)
         evaluation.to_csv(folder/'evaluacion_destinos.csv',index=False); national_evaluation.to_csv(folder/'evaluacion_nacional.csv',index=False)
-        write_json(folder/'metricas.json',metrics); write_json(folder/'ajustes_validacion.json',models); stage('validacion_temporal')
+        write_json(folder/'metricas.json',metrics); report['metricas']=metrics
+        write_json(folder/'ajustes_validacion.json',models); stage('validacion_temporal')
         forecast,factors,parameters=estimate(prepared['nacional'],prepared['movilidad'],cfg)
         forecast=forecast.assign(run_id=run_id,fecha_generacion=now(),version=cfg['procedure']['version'])
         write_json(folder/'factores.json',factors); write_json(folder/'parametros.json',parameters)
@@ -177,14 +189,19 @@ def run(config_path):
         comparison.to_csv(folder/'conciliacion_aeropuerto.csv',index=False); stage('estimacion_y_triangulacion')
         integrity=bool(len(forecast)==len(cfg['scope']['destinations'])*len(cfg['procedure']['targets']) and
             not forecast.duplicated(['destino','periodo']).any() and np.isfinite(forecast.valor).all() and forecast.valor.ge(0).all())
-        accepted=bool(integrity and all(m['aceptado'] for m in metrics['destinos'].values()))
+        report['monitoreo']=monitor(cfg,tables,dates,checks,forecast,output)
+        write_json(folder/'monitoreo.json',report['monitoreo'])
+        write_json(output/'ultimo_monitoreo.json',report['monitoreo']);stage('monitoreo')
+        accepted=bool(integrity and not report['monitoreo']['critico'] and all(m['aceptado'] for m in metrics['destinos'].values()))
         report.update(estado='APPROVED' if accepted else 'REJECTED',aprobado=accepted,integridad_salidas=integrity,metricas=metrics,
             limitaciones=['Solo tres meses de validación del destino; no hay enero-febrero observados de movilidad.',
             'Escala empírica con poblaciones diferentes, no participación de mercado.',
             'Destinos potencialmente solapados; no sumarlos como personas únicas.',
             'Ratios Tikal/movilidad no identifican compradores individuales.'])
         if accepted:
-            write_json(output/'aprobada.json',dict(run_id=run_id,destino=cfg['destination'],estimaciones=str((folder/'estimaciones.csv').relative_to(output)),metricas=str((folder/'metricas.json').relative_to(output)),fecha=now()))
+            report['fin']=now();report['publicacion']='Autorizada; persistencia MLflow previa al cambio'
+            write_json(folder/'ejecucion.json',report);tracker.record(report,folder)
+            publish(folder,output,cfg.get('environment','production'));published=True
             report['publicacion']='Manifiesto de Petén actualizado'
         else: report['publicacion']='Candidata rechazada; se conserva la versión aprobada previa, si existe'
         stage('decision_aceptacion')
@@ -192,8 +209,26 @@ def run(config_path):
         report.update(estado='FAILED',error=f'{type(exc).__name__}: {exc}',publicacion='Sin reemplazo de versión aprobada')
     finally:
         report['fin']=now(); write_json(folder/'ejecucion.json',report)
+        if tracker:
+            try:tracker.record(report,folder)
+            except Exception as exc:
+                if published:
+                    if previous_pointer is None:pointer.unlink(missing_ok=True)
+                    else:
+                        tmp=pointer.with_suffix('.rollback');tmp.write_bytes(previous_pointer);tmp.replace(pointer)
+                    write_json(output/'versiones'/run_id/'revocada.json',dict(motivo='Seguimiento final no confirmado',fecha=now()))
+                report.update(estado='FAILED',error=f'MLflow: {exc}',publicacion='Sin publicación; seguimiento no confirmado')
+                write_json(folder/'ejecucion.json',report)
+        if report['estado'] in ['APPROVED','REJECTED']:
+            observed_pointer(output,folder,report)
     print(json.dumps(dict(run_id=run_id,estado=report['estado'],reporte=str(folder/'ejecucion.json'),error=report.get('error'),metricas=report.get('metricas')),ensure_ascii=False,indent=2))
     return 1 if report['estado']=='FAILED' else 0
+
+
+def run(config_path):
+    cfg=json.loads(Path(config_path).read_text())
+    output=Path(os.environ.get('LAB_OUTPUT',ROOT/cfg['output_dir']))
+    with store_lock(output):return _run(config_path)
 
 
 if __name__=='__main__':

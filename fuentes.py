@@ -26,7 +26,7 @@ def periods(year, month):
 
 def expected(spec):
     if 'coverage' in spec:
-        return pd.DatetimeIndex(pd.to_datetime(spec['coverage']))
+        return pd.DatetimeIndex(pd.to_datetime(spec['coverage'],format='%Y-%m'))
     if 'years' in spec:
         return pd.DatetimeIndex([pd.Timestamp(y, m, 1) for y in spec['years'] for m in range(1, 13)])
     return pd.date_range(spec['start'], spec['end'], freq='MS')

@@ -1,0 +1,56 @@
+name: peten-lab11
+x-common: &common
+  build:
+    context: .
+    args:
+      GIT_COMMIT: ${GIT_COMMIT:-unknown}
+  image: peten-lab11:local
+  environment: &env
+    LAB_STATE: /state
+    LAB_OUTPUT: /state/resultados_peten
+    MLFLOW_TRACKING_URI: sqlite:////state/mlflow_data/mlflow.db
+    MLFLOW_ARTIFACT_ROOT: /state/mlflow_data/artifacts
+    MLFLOW_DISABLE_AGENT_HINT: "1"
+  volumes:
+    - lab_state:/state
+services:
+  tablero:
+    <<: *common
+    ports: ["127.0.0.1:8501:8501"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8501/_stcore/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+  mlflow:
+    <<: *common
+    ports: ["127.0.0.1:5000:5000"]
+    command: ["python", "contenedor.py", "mlflow"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+  pipeline:
+    <<: *common
+    profiles: ["tareas"]
+    volumes:
+      - lab_state:/state
+      - ${DATOS_DIR:-.}:/datos:ro
+    command: ["python", "contenedor.py", "pipeline"]
+  pruebas:
+    <<: *common
+    profiles: ["tareas"]
+    command: ["python", "-m", "unittest", "-v", "test_pipeline", "test_fase2"]
+  demo:
+    <<: *common
+    profiles: ["demo"]
+    environment:
+      <<: *env
+      LAB_OUTPUT: /state/demo_sintetico
+      LAB_ENVIRONMENT: synthetic
+      LAB_ADMIN: "1"
+    command: ["streamlit", "run", "app.py", "--server.address=0.0.0.0", "--server.port=8502"]
+    ports: ["127.0.0.1:8502:8502"]
+volumes:
+  lab_state:
